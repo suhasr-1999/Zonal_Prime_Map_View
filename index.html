@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zonal Network Planning - Shadowfax</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,sans-serif;background:#f5f7f9;color:#333;overflow:hidden;height:100vh}
+:root{--teal:#0B9B8A;--td:#078272;--tl:#12b09e;--tbg:rgba(11,155,138,.06);--yel:#C8C820;--green:#4caf50;--greenD:#1b5e20;--orange:#ff9800;--orangeD:#e65100;--w:#fff;--bg:#f5f7f9;--bdr:#e8ecf0;--tx:#333;--txl:#777;--txm:#aaa;--sh:0 2px 12px rgba(0,0,0,.06);--shl:0 8px 24px rgba(0,0,0,.12);--sw:280px;--sidebar-dark:#0A1628}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes dash{to{stroke-dashoffset:-20}}
+/* LOADING */
+.lo{position:fixed;inset:0;z-index:3000;background:var(--w);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:all .5s}.lo.hide{opacity:0;pointer-events:none}
+.lo-brand{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.lo .lo-sub{color:var(--td);font-size:14px;font-weight:700;margin-bottom:4px}.lo .lo-sub2{color:var(--txm);font-size:10px;margin-bottom:24px}
+.pw{width:320px;max-width:90vw}.pl{font-size:9px;color:var(--txl);margin-bottom:3px;text-align:center}.pb-w{width:100%;height:4px;background:var(--bdr);border-radius:4px;overflow:hidden}.pf{height:100%;background:linear-gradient(90deg,var(--teal),var(--tl));width:0%;transition:width .3s}
+input[type="file"]{display:none}
+/* APP */
+.app{display:none;height:100vh;flex-direction:column}
+.hdr{background:var(--w);border-bottom:1px solid var(--bdr);padding:4px 12px;display:flex;align-items:center;gap:8px;z-index:1001;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.03)}
+.hdr .br{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.hdr .br img{height:22px}
+.pn{font-size:10px;font-weight:700;color:var(--tx);padding-left:8px;border-left:2px solid var(--bdr);margin-left:2px;white-space:nowrap;letter-spacing:.2px}
+/* TABS */
+.tabs{display:flex;gap:2px;margin-left:10px;background:#f0f2f4;border-radius:7px;padding:2px}
+.tab{padding:5px 14px;font-size:9px;font-weight:700;color:var(--txl);background:transparent;border:none;border-radius:5px;cursor:pointer;letter-spacing:.3px;text-transform:uppercase;display:flex;align-items:center;gap:5px;font-family:'Inter',sans-serif}
+.tab:hover{color:var(--teal)}
+.tab.active{background:var(--teal);color:var(--w);box-shadow:0 1px 4px rgba(11,155,138,.3)}
+.hacts{display:flex;gap:4px;margin-left:auto;align-items:center}
+.hb-up{background:var(--w);color:var(--txl);border:1px solid var(--bdr);padding:4px 8px;border-radius:5px;cursor:pointer;font-size:8px;display:flex;align-items:center;gap:3px;font-weight:600;font-family:'Inter',sans-serif;text-decoration:none}
+.hb-up:hover{border-color:var(--teal);color:var(--teal)}
+label.hb-up{cursor:pointer}
+/* MAIN */
+.main{flex:1;position:relative;overflow:hidden}
+.map-wrap{position:absolute;inset:0}.map-wrap>div{width:100%;height:100%}
+/* KPI */
+.kpi-strip{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:999;display:flex;gap:4px;flex-wrap:nowrap}
+.kp{background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border:1px solid var(--bdr);border-radius:7px;padding:4px 10px;display:flex;flex-direction:column;box-shadow:var(--sh);white-space:nowrap;align-items:center}
+.kp .kv{font-size:12px;font-weight:800;line-height:1}
+.kp .kl{font-size:7px;color:var(--txm);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.kp-route .kv{color:var(--teal)}
+.kp-live .kv{color:var(--green)}
+.kp-nonlive .kv{color:var(--orange)}
+.kp-origin .kv{color:#1565c0}
+.kp-dest .kv{color:#6a1b9a}
+.kp-pins .kv{color:#e65100}
+/* SIDEBAR */
+.sidebar{position:absolute;top:0;left:0;bottom:0;width:var(--sw);background:rgba(255,255,255,.97);backdrop-filter:blur(12px);border-right:1px solid var(--bdr);z-index:1000;transform:translateX(0);transition:transform .25s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;box-shadow:2px 0 16px rgba(0,0,0,.06);overflow:hidden}
+.sidebar.collapsed{transform:translateX(calc(-1 * var(--sw)))}
+.sb-tog{position:absolute;top:50%;right:-28px;transform:translateY(-50%);width:28px;height:48px;background:rgba(255,255,255,.97);border:1px solid var(--bdr);border-left:none;border-radius:0 8px 8px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--txl);z-index:1001;box-shadow:2px 0 8px rgba(0,0,0,.04)}.sb-tog:hover{color:var(--teal)}
+.sb-hdr{padding:10px 12px 8px;border-bottom:1px solid var(--bdr);flex-shrink:0}
+.sb-t{font-size:10px;font-weight:700;color:var(--teal);display:flex;align-items:center;gap:5px}
+.sb-body{flex:1;overflow-y:auto;padding:8px 12px}
+.sb-sec{margin-bottom:10px}
+.sb-sec-t{font-size:7px;font-weight:600;color:var(--txm);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.sb-f{margin-bottom:6px}
+.sb-f>label{font-size:7px;font-weight:600;color:var(--txm);display:block;margin-bottom:2px;text-transform:uppercase;letter-spacing:.3px}
+.sb-srch{display:flex;gap:3px;margin-bottom:5px}
+.sb-srch input{flex:1;padding:5px 8px;border:1px solid var(--bdr);border-radius:6px;font-size:9px;font-family:'Inter',sans-serif;background:var(--w);color:var(--tx)}.sb-srch input:focus{outline:none;border-color:var(--teal)}
+.sb-srch button{padding:5px 8px;background:var(--teal);color:var(--w);border:none;border-radius:6px;cursor:pointer;font-size:9px;display:flex;align-items:center;justify-content:center;width:28px;height:28px}
+.sb-btn{width:100%;padding:5px;border:1px solid var(--bdr);border-radius:6px;background:var(--w);color:var(--txl);font-size:8px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;margin-bottom:4px;transition:all .15s;font-family:'Inter',sans-serif;letter-spacing:.2px}.sb-btn:hover{border-color:var(--teal);color:var(--teal)}.sb-btn.on{background:var(--teal);color:var(--w);border-color:var(--teal)}
+.sb-rst{width:100%;padding:5px;border:1px solid var(--bdr);border-radius:6px;background:var(--bg);color:var(--txm);font-size:8px;cursor:pointer;text-align:center;margin-top:4px;font-weight:600;letter-spacing:.3px;font-family:'Inter',sans-serif}.sb-rst:hover{color:var(--teal);border-color:var(--teal)}
+/* MULTI-SELECT */
+.ms-w{position:relative;margin-bottom:6px}
+.ms-b{width:100%;padding:5px 22px 5px 8px;border:1px solid var(--bdr);border-radius:6px;font-size:9px;font-family:'Inter',sans-serif;background:var(--w);color:var(--tx);cursor:pointer;text-align:left;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' fill='%23999' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ms-b:focus{outline:none;border-color:var(--teal)}
+.ms-c{background:var(--teal);color:var(--w);font-size:8px;padding:1px 5px;border-radius:8px;font-weight:700;margin-left:4px}
+.ms-d{position:absolute;top:100%;left:0;right:0;background:var(--w);border:1px solid var(--bdr);border-top:2px solid var(--teal);border-radius:0 0 8px 8px;box-shadow:var(--shl);z-index:2000;display:none;flex-direction:column;max-height:300px}.ms-d.show{display:flex}
+.ms-ds{padding:6px 8px;border-bottom:1px solid var(--bdr)}
+.ms-ds input{width:100%;padding:4px 8px;border:1px solid var(--bdr);border-radius:5px;font-size:9px;font-family:'Inter',sans-serif;outline:none}.ms-ds input:focus{border-color:var(--teal)}
+.ms-dl{overflow-y:auto;flex:1;padding:2px 0;max-height:180px}
+.ms-i{padding:4px 8px;display:flex;align-items:center;gap:6px;cursor:pointer;transition:background .1s;font-size:9px}.ms-i:hover{background:var(--tbg)}
+.ms-i input[type=checkbox]{accent-color:var(--teal);width:13px;height:13px;cursor:pointer;flex-shrink:0}
+.ms-i label{cursor:pointer;flex:1;user-select:none;font-weight:500;color:var(--tx)}
+.ms-i .ms-n{font-size:8px;color:var(--txm);flex-shrink:0}
+.ms-i .ms-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ms-ft{padding:6px 8px;border-top:1px solid var(--bdr);display:flex;gap:6px}
+.ms-ft button{flex:1;padding:5px;border-radius:5px;font-size:9px;font-weight:600;cursor:pointer;border:none;font-family:'Inter',sans-serif}
+.ms-ft .ms-ok{background:var(--teal);color:var(--w)}.ms-ft .ms-ok:hover{background:var(--td)}
+.ms-ft .ms-cl{background:var(--bg);color:var(--txm);border:1px solid var(--bdr)}.ms-ft .ms-cl:hover{color:var(--teal);border-color:var(--teal)}
+/* LEGEND */
+.mleg{position:absolute;bottom:8px;right:8px;z-index:999;background:rgba(255,255,255,.96);border:1px solid var(--bdr);border-radius:8px;padding:7px 10px;min-width:150px;max-height:55vh;overflow-y:auto;box-shadow:var(--sh);font-size:8px}
+.mleg h4{font-size:7px;font-weight:700;color:var(--txm);text-transform:uppercase;margin-bottom:3px;letter-spacing:.3px}
+.li{display:flex;align-items:center;gap:5px;padding:1.5px 0;font-size:8px;color:var(--txl)}
+.li .lc{width:14px;height:3px;border-radius:2px;flex-shrink:0}
+.li .ld{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+/* POPUP */
+.leaflet-popup-content-wrapper{background:var(--w)!important;color:var(--tx)!important;border:1px solid var(--bdr)!important;border-radius:10px!important;box-shadow:var(--shl)!important;max-width:340px!important}
+.leaflet-popup-tip{background:var(--w)!important}
+.leaflet-popup-close-button{color:var(--txm)!important;font-size:14px!important}
+.pt{font-size:12px;font-weight:800;color:var(--tx);text-align:center;margin-bottom:2px}
+.ptbl{width:100%;border-collapse:collapse;font-size:8px}.ptbl td{padding:3px 6px;border-bottom:1px solid #f0f2f4}.ptbl td:first-child{color:var(--txm);font-weight:500;font-size:7px;white-space:nowrap}.ptbl td:last-child{font-weight:600;color:var(--tx);text-align:right}.ptbl tr:last-child td{border-bottom:none}
+.spb{display:inline-block;padding:3px 10px;border-radius:8px;font-size:9px;font-weight:700;margin:3px 0 5px}
+.hub-home-icon{display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 2px 3px rgba(0,0,0,.2))}
+.hb-leg{position:absolute;bottom:8px;left:calc(var(--sw) + 8px);z-index:999;background:rgba(255,255,255,.96);border:1px solid var(--bdr);border-radius:8px;padding:7px 10px;box-shadow:var(--sh);font-size:8px;display:none;max-width:260px}.hb-leg.show{display:block}
+.sidebar.collapsed~.hb-leg{left:8px}
+.dc-dot{border-radius:50%}
+/* FLOW LANE STYLES */
+.flow-live{stroke:var(--green);filter:drop-shadow(0 1px 2px rgba(76,175,80,.3))}
+.flow-nonlive{stroke:var(--orange);stroke-dasharray:6,4;animation:dash 1.2s linear infinite;filter:drop-shadow(0 1px 2px rgba(255,152,0,.3))}
+.flow-hl{stroke-width:4.5!important;filter:drop-shadow(0 2px 6px rgba(0,0,0,.35))!important}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:#f0f2f4}::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+</style>
+</head>
+<body>
+<!-- LOADING -->
+<div class="lo" id="lo">
+  <div class="lo-brand"><img src="https://www.shadowfax.in/logo_header_tm.svg" alt="Shadowfax" style="height:32px" onerror="this.outerHTML='<div style=font-size:20px;font-weight:800;color:#0B9B8A>SHADOWFAX</div>'"></div>
+  <p class="lo-sub">Zonal Network Planning</p>
+  <p class="lo-sub2">Live data from Google Sheet · Road &amp; Air connectivity</p>
+  <div class="pw" id="pw"><div class="pl" id="pl">Initializing...</div><div class="pb-w"><div class="pf" id="pf"></div></div></div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+  <div class="hdr">
+    <div class="br">
+      <img src="https://www.shadowfax.in/logo_header_tm.svg" alt="Shadowfax" style="height:22px" onerror="this.outerHTML='<span style=font-size:11px;font-weight:800;color:#0B9B8A>SHADOWFAX</span>'">
+      <div class="pn">Zonal Network Planning</div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" id="tabRoad" onclick="switchTab('road')">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm12 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm-1.5-5.5V9.5h2.5L21 13h-4.5z"/></svg>
+        Zonal Road
+      </button>
+      <button class="tab" id="tabAir" onclick="switchTab('air')">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+        Zonal Air
+      </button>
+    </div>
+    <div class="hacts">
+      <label class="hb-up" id="geoBtn" title="Upload pincode boundaries GeoJSON">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/></svg>
+        Upload GeoJSON
+        <input type="file" id="geoIn" accept=".geojson,.json">
+      </label>
+    </div>
+  </div>
+  <div class="main">
+    <div class="map-wrap"><div id="map"></div></div>
+
+    <!-- KPI: ROAD -->
+    <div class="kpi-strip" id="kpiRoad">
+      <div class="kp kp-route"><div class="kv" id="kR_routes">-</div><div class="kl">Total Lanes</div></div>
+      <div class="kp kp-live"><div class="kv" id="kR_live">-</div><div class="kl">Live</div></div>
+      <div class="kp kp-nonlive"><div class="kv" id="kR_non">-</div><div class="kl">Non-Live</div></div>
+      <div class="kp kp-origin"><div class="kv" id="kR_org">-</div><div class="kl">Origin DCs</div></div>
+      <div class="kp kp-dest"><div class="kv" id="kR_dst">-</div><div class="kl">Dest DCs</div></div>
+      <div class="kp kp-pins"><div class="kv" id="kR_pin">-</div><div class="kl">Pincodes</div></div>
+    </div>
+
+    <!-- KPI: AIR -->
+    <div class="kpi-strip" id="kpiAir" style="display:none">
+      <div class="kp kp-route"><div class="kv" id="kA_routes">-</div><div class="kl">Total Routes</div></div>
+      <div class="kp kp-live"><div class="kv" id="kA_live">-</div><div class="kl">Live</div></div>
+      <div class="kp kp-nonlive"><div class="kv" id="kA_non">-</div><div class="kl">Future</div></div>
+      <div class="kp kp-origin"><div class="kv" id="kA_org">-</div><div class="kl">Origin Cities</div></div>
+      <div class="kp kp-dest"><div class="kv" id="kA_dst">-</div><div class="kl">Dest Cities</div></div>
+    </div>
+
+    <!-- SIDEBAR: ROAD -->
+    <div class="sidebar" id="sbRoad">
+      <div class="sb-tog" onclick="toggleSB('sbRoad')">&#9664;</div>
+      <div class="sb-hdr"><div class="sb-t">Road Network - Filters</div></div>
+      <div class="sb-body">
+        <div class="sb-sec"><div class="sb-sec-t">Filters</div>
+          <div class="sb-f"><label>Phase</label>
+            <div class="ms-w" id="R_phaseW"><div class="ms-b" onclick="tMS('R_phaseW')">All Phases</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_phaseW')"/></div><div class="ms-dl" id="R_phaseL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_phaseW')">OK</button><button class="ms-cl" onclick="cMS('R_phaseW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Lane</label>
+            <div class="ms-w" id="R_laneW"><div class="ms-b" onclick="tMS('R_laneW')">All Lanes</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_laneW')"/></div><div class="ms-dl" id="R_laneL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_laneW')">OK</button><button class="ms-cl" onclick="cMS('R_laneW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Origin DC</label>
+            <div class="ms-w" id="R_orgW"><div class="ms-b" onclick="tMS('R_orgW')">All Origins</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_orgW')"/></div><div class="ms-dl" id="R_orgL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_orgW')">OK</button><button class="ms-cl" onclick="cMS('R_orgW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Destination DC</label>
+            <div class="ms-w" id="R_dstW"><div class="ms-b" onclick="tMS('R_dstW')">All Destinations</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_dstW')"/></div><div class="ms-dl" id="R_dstL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_dstW')">OK</button><button class="ms-cl" onclick="cMS('R_dstW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>TAT</label>
+            <div class="ms-w" id="R_tatW"><div class="ms-b" onclick="tMS('R_tatW')">All TATs</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_tatW')"/></div><div class="ms-dl" id="R_tatL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_tatW')">OK</button><button class="ms-cl" onclick="cMS('R_tatW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Status</label>
+            <div class="ms-w" id="R_stW"><div class="ms-b" onclick="tMS('R_stW')">All Statuses</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_stW')"/></div><div class="ms-dl" id="R_stL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_stW')">OK</button><button class="ms-cl" onclick="cMS('R_stW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Type of Lane</label>
+            <div class="ms-w" id="R_typW"><div class="ms-b" onclick="tMS('R_typW')">All Types</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_typW')"/></div><div class="ms-dl" id="R_typL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_typW')">OK</button><button class="ms-cl" onclick="cMS('R_typW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Zone</label>
+            <div class="ms-w" id="R_znW"><div class="ms-b" onclick="tMS('R_znW')">All Zones</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'R_znW')"/></div><div class="ms-dl" id="R_znL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('R_znW')">OK</button><button class="ms-cl" onclick="cMS('R_znW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-rst" onclick="resetRoad()">Reset All Filters</div>
+        </div>
+        <div class="sb-sec"><div class="sb-sec-t">Search</div>
+          <div class="sb-srch"><input id="sDc" placeholder="DC name..." onkeydown="if(event.key==='Enter')searchDC()"><button onclick="searchDC()" title="Search DC">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm12 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+          </button></div>
+          <div class="sb-srch"><input id="sP" placeholder="Pincode..." onkeydown="if(event.key==='Enter')searchPin()"><button onclick="searchPin()"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="10" cy="10" r="7"/><line x1="15" y1="15" x2="21" y2="21"/></svg></button></div>
+          <div class="sb-srch"><input id="sH" placeholder="Hub name..." onkeydown="if(event.key==='Enter')searchHub()"><button onclick="searchHub()"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M3 21V10l9-7 9 7v11H14v-6h-4v6z"/></svg></button></div>
+        </div>
+        <div class="sb-sec"><div class="sb-sec-t">Layers</div>
+          <button class="sb-btn on" id="flowBtn" onclick="toggleFlows()">Show Lane Arrows</button>
+          <button class="sb-btn" id="hubBtn" onclick="toggleHubs()">Show LM Hubs</button>
+          <button class="sb-btn" id="pbBtn" onclick="togglePinBound()">Pincode Boundaries</button>
+          <button class="sb-btn" id="hbBtn" onclick="toggleHB()">Hub Boundary (merged)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIDEBAR: AIR -->
+    <div class="sidebar" id="sbAir" style="display:none">
+      <div class="sb-tog" onclick="toggleSB('sbAir')">&#9664;</div>
+      <div class="sb-hdr"><div class="sb-t">Air Network - Filters</div></div>
+      <div class="sb-body">
+        <div class="sb-sec"><div class="sb-sec-t">Filters</div>
+          <div class="sb-f"><label>Origin City</label>
+            <div class="ms-w" id="A_orgW"><div class="ms-b" onclick="tMS('A_orgW')">All Origins</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'A_orgW')"/></div><div class="ms-dl" id="A_orgL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('A_orgW')">OK</button><button class="ms-cl" onclick="cMS('A_orgW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Destination City</label>
+            <div class="ms-w" id="A_dstW"><div class="ms-b" onclick="tMS('A_dstW')">All Destinations</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'A_dstW')"/></div><div class="ms-dl" id="A_dstL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('A_dstW')">OK</button><button class="ms-cl" onclick="cMS('A_dstW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-f"><label>Connection Type</label>
+            <div class="ms-w" id="A_ctW"><div class="ms-b" onclick="tMS('A_ctW')">All</div>
+              <div class="ms-d"><div class="ms-ds"><input placeholder="Search..." oninput="fMS(this,'A_ctW')"/></div><div class="ms-dl" id="A_ctL"></div><div class="ms-ft"><button class="ms-ok" onclick="aMS('A_ctW')">OK</button><button class="ms-cl" onclick="cMS('A_ctW')">Clear</button></div></div>
+            </div>
+          </div>
+          <div class="sb-rst" onclick="resetAir()">Reset All Filters</div>
+        </div>
+        <div class="sb-sec"><div class="sb-sec-t">Search</div>
+          <div class="sb-srch"><input id="sAc" placeholder="City name..." onkeydown="if(event.key==='Enter')searchAirCity()"><button onclick="searchAirCity()">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg>
+          </button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mleg" id="leg"></div>
+    <div class="hb-leg" id="hbLeg"><strong style="color:#1b5e20">Hub Boundary</strong><br><span style="color:#777">Merged pincode polygons per LM Hub. Upload GeoJSON first.</span></div>
+  </div>
+</div>
+
+<script>
+// ================== GOOGLE SHEET CONFIG ==================
+var SHEET_ID='1HpVEvL9PsXNTzxqSx6Mc6KhpbYk7Cqkm4N1FonUTb68';
+var ROAD_SHEET_NAME='Zonal Map by Road Base data';
+var AIR_SHEET_NAME='Zonal Map Air Base Data';
+function sheetURL(name){return 'https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(name)+'&cachebust='+Date.now()}
+function sheetURLAlt(name){return 'https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&sheet='+encodeURIComponent(name)}
+
+// Air city coordinates (cities referenced in Air sheet)
+var AIR_CITY_COORDS={
+  'Hyderabad':[17.3850,78.4867],'Delhi':[28.7041,77.1025],
+  'Bangalore':[12.9716,77.5946],'Kolkata':[22.5726,88.3639],
+  'Ahmedabad':[23.0225,72.5714],'Mumbai':[19.0760,72.8777],
+  'Pune':[18.5204,73.8567],'Coimbatore':[11.0168,76.9558],
+  'Surat':[21.1702,72.8311],'Lucknow':[26.8467,80.9462],
+  'Patna':[25.5941,85.1376],'Jaipur':[26.9124,75.7873],
+  'Chennai':[13.0827,80.2707],'Guwahati':[26.1445,91.7362]
+};
+
+// ================== DATA CONTAINERS ==================
+var ROAD_ROUTES=[],AIR_ROUTES=[],DC_LIST=[];
+
+function fetchSheet(name){
+  return fetch(sheetURL(name)).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status+' fetching "'+name+'". Check that the Google Sheet is shared as "Anyone with the link can view".');
+    return r.text();
+  }).then(function(txt){
+    if(txt.trim().charAt(0)==='<')throw new Error('The Google Sheet is not publicly viewable. Open the sheet → Share → set access to "Anyone with the link" (Viewer).');
+    var parsed=Papa.parse(txt,{header:false,skipEmptyLines:true,dynamicTyping:false});
+    return parsed.data;
+  }).catch(function(err){
+    if(err instanceof TypeError){
+      // Network / CORS / file:// — fetch threw before getting a response
+      throw new Error('FETCH_BLOCKED');
+    }
+    throw err;
+  });
+}
+
+function parseRoadData(rows){
+  var od={};
+  for(var i=1;i<rows.length;i++){
+    var row=rows[i];
+    var phase=(row[0]||'').trim(),lane=(row[1]||'').trim(),origin=(row[2]||'').trim();
+    var oLat=parseFloat(row[3]),oLng=parseFloat(row[4]);
+    var dest=(row[5]||'').trim();
+    var dLat=parseFloat(row[6]),dLng=parseFloat(row[7]);
+    var pin=row[9],hub=(row[10]||'').trim();
+    var hLat=parseFloat(row[11]),hLng=parseFloat(row[12]);
+    var tat=(row[13]||'').trim(),status=(row[15]||'').trim(),tol=(row[16]||'').trim(),zone=(row[17]||'').trim();
+    if(!origin||!dest||isNaN(oLat)||isNaN(dLat))continue;
+    if(zone==='West ')zone='West';
+    if(tol==='Dedicated ')tol='Dedicated';
+    if(tol==='ECOM')tol='Ecom';
+    if(tol==='Zonal + Ecom')tol='Zonal+Ecom';
+    var key=origin+'||'+dest;
+    if(!od[key]){
+      od[key]={phase:phase,lane:lane,origin:origin,oLat:+oLat.toFixed(5),oLng:+oLng.toFixed(5),dest:dest,dLat:+dLat.toFixed(5),dLng:+dLng.toFixed(5),tat:tat,status:status,type:tol,zone:zone,pins:[],hubs:{}};
+    }
+    if(pin){
+      var pinStr=String(pin).replace(/\..*$/,'').trim();
+      od[key].pins.push(pinStr);
+      if(hub&&!isNaN(hLat)&&!isNaN(hLng)){
+        if(!od[key].hubs[hub])od[key].hubs[hub]={n:hub,lat:+hLat.toFixed(5),lng:+hLng.toFixed(5),p:[]};
+        od[key].hubs[hub].p.push(pinStr);
+      }
+    }
+  }
+  var arr=[];
+  Object.keys(od).forEach(function(k){
+    var v=od[k];
+    var hubArr=[];Object.keys(v.hubs).forEach(function(hn){hubArr.push(v.hubs[hn])});
+    v.hubs=hubArr;
+    var seen={};var uniq=[];v.pins.forEach(function(p){if(!seen[p]){seen[p]=1;uniq.push(p)}});
+    v.pins=uniq;
+    arr.push(v);
+  });
+  return arr;
+}
+
+function parseAirData(rows){
+  var arr=[],seen={};
+  for(var i=1;i<rows.length;i++){
+    var row=rows[i];
+    var orig=(row[1]||'').trim(),dest=(row[2]||'').trim(),conn=(row[3]||'').trim();
+    if(!orig||!dest)continue;
+    var k=orig+'||'+dest;if(seen[k])continue;seen[k]=1;
+    var oc=AIR_CITY_COORDS[orig],dc=AIR_CITY_COORDS[dest];
+    if(!oc||!dc)continue;
+    var status=conn==='Live'?'Live':'Non-live';
+    arr.push({origin:orig,dest:dest,oLat:oc[0],oLng:oc[1],dLat:dc[0],dLng:dc[1],status:status,connType:conn});
+  }
+  return arr;
+}
+
+function buildDCList(routes){
+  var dcs={};
+  routes.forEach(function(r){
+    dcs[r.origin]={name:r.origin,lat:r.oLat,lng:r.oLng};
+    if(!dcs[r.dest])dcs[r.dest]={name:r.dest,lat:r.dLat,lng:r.dLng};
+  });
+  var arr=[];Object.keys(dcs).forEach(function(k){arr.push(dcs[k])});
+  return arr;
+}
+
+function buildIndexes(){
+  PIN_IDX={};HUB_IDX={};
+  ROAD_ROUTES.forEach(function(r){
+    (r.pins||[]).forEach(function(p){if(!PIN_IDX[p])PIN_IDX[p]=[];PIN_IDX[p].push(r)});
+    (r.hubs||[]).forEach(function(h){
+      if(!HUB_IDX[h.n])HUB_IDX[h.n]={lat:h.lat,lng:h.lng,routes:[],pins:[]};
+      HUB_IDX[h.n].routes.push(r);
+      HUB_IDX[h.n].pins=HUB_IDX[h.n].pins.concat(h.p||[]);
+    });
+  });
+}
+
+// ================== STATE ==================
+var currentTab='road';
+var map,cv;
+var flowLayer,hubLayer,pbLayer,hbLayer,hsLayer,dcLayer,airLayer;
+var gjD=null;
+var PIN_IDX={},HUB_IDX={};
+var roadFiltered=[],airFiltered=[];
+var hubsOn=false,pbOn=false,hbOn=false,flowsOn=true;
+
+
+// ================== FILTER STATE ==================
+var R_sel={phase:new Set(),lane:new Set(),org:new Set(),dst:new Set(),tat:new Set(),st:new Set(),typ:new Set(),zn:new Set()};
+var A_sel={org:new Set(),dst:new Set(),ct:new Set()};
+
+var FM={
+  R_phaseW:{k:'phase',list:'R_phaseL',lbl:'phase(s)',all:'All Phases',sel:R_sel,key:'phase'},
+  R_laneW:{k:'lane',list:'R_laneL',lbl:'lane(s)',all:'All Lanes',sel:R_sel,key:'lane'},
+  R_orgW:{k:'origin',list:'R_orgL',lbl:'origin(s)',all:'All Origins',sel:R_sel,key:'org'},
+  R_dstW:{k:'dest',list:'R_dstL',lbl:'dest(s)',all:'All Destinations',sel:R_sel,key:'dst'},
+  R_tatW:{k:'tat',list:'R_tatL',lbl:'TAT(s)',all:'All TATs',sel:R_sel,key:'tat'},
+  R_stW:{k:'status',list:'R_stL',lbl:'status(es)',all:'All Statuses',sel:R_sel,key:'st'},
+  R_typW:{k:'type',list:'R_typL',lbl:'type(s)',all:'All Types',sel:R_sel,key:'typ'},
+  R_znW:{k:'zone',list:'R_znL',lbl:'zone(s)',all:'All Zones',sel:R_sel,key:'zn'},
+  A_orgW:{k:'origin',list:'A_orgL',lbl:'origin(s)',all:'All Origins',sel:A_sel,key:'org'},
+  A_dstW:{k:'dest',list:'A_dstL',lbl:'dest(s)',all:'All Destinations',sel:A_sel,key:'dst'},
+  A_ctW:{k:'connType',list:'A_ctL',lbl:'type(s)',all:'All',sel:A_sel,key:'ct'}
+};
+
+// ================== MULTI-SELECT ==================
+function buildMS(wid,items,counts,colorFn){
+  var el=document.getElementById(FM[wid].list);el.innerHTML='';
+  items.forEach(function(item){
+    var c=counts[item]||0;var col=colorFn?colorFn(item):null;
+    var d=document.createElement('div');d.className='ms-i';d.setAttribute('data-val',String(item).toLowerCase());
+    var sid='ms_'+wid+'_'+String(item).replace(/[^a-zA-Z0-9]/g,'_');
+    var dot=col?'<div class="ms-dot" style="background:'+col+'"></div>':'';
+    d.innerHTML='<input type="checkbox" id="'+sid+'"/>'+dot+'<label for="'+sid+'">'+item+'</label><span class="ms-n">'+c.toLocaleString()+'</span>';
+    el.appendChild(d);
+  });
+}
+function tMS(wid){var dd=document.getElementById(wid).querySelector('.ms-d');document.querySelectorAll('.ms-d').forEach(function(d){if(d!==dd)d.classList.remove('show')});dd.classList.toggle('show')}
+function fMS(inp,wid){var q=inp.value.toLowerCase();document.getElementById(wid).querySelectorAll('.ms-i').forEach(function(el){el.style.display=el.getAttribute('data-val').includes(q)?'':'none'})}
+function gMS(wid){var s=new Set();document.getElementById(wid).querySelectorAll('.ms-i input:checked').forEach(function(cb){s.add(cb.parentElement.querySelector('label').textContent)});return s}
+function aMS(wid){
+  document.getElementById(wid).querySelector('.ms-d').classList.remove('show');
+  var m=FM[wid];var set=gMS(wid);m.sel[m.key]=set;
+  var btn=document.getElementById(wid).querySelector('.ms-b');
+  btn.innerHTML=set.size>0?set.size+' '+m.lbl+'<span class="ms-c">'+set.size+'</span>':m.all;
+  if(wid.charAt(0)==='R')applyRoadFilters();else applyAirFilters();
+}
+function cMS(wid){document.getElementById(wid).querySelectorAll('.ms-i input').forEach(function(cb){cb.checked=false});aMS(wid)}
+function resetRoad(){['R_phaseW','R_laneW','R_orgW','R_dstW','R_tatW','R_stW','R_typW','R_znW'].forEach(cMS)}
+function resetAir(){['A_orgW','A_dstW','A_ctW'].forEach(cMS)}
+
+// ================== CURVE GEOMETRY (quadratic bezier arc) ==================
+function curvedPath(start,end,curveHeight){
+  if(curveHeight===undefined)curveHeight=0.15;
+  var dLat=end[0]-start[0],dLng=end[1]-start[1];
+  var midLat=(start[0]+end[0])/2,midLng=(start[1]+end[1])/2;
+  // perpendicular offset (to the right of direction)
+  var controlLat=midLat-dLng*curveHeight;
+  var controlLng=midLng+dLat*curveHeight;
+  var pts=[];
+  for(var t=0;t<=1.0001;t+=0.04){
+    var lat=(1-t)*(1-t)*start[0]+2*(1-t)*t*controlLat+t*t*end[0];
+    var lng=(1-t)*(1-t)*start[1]+2*(1-t)*t*controlLng+t*t*end[1];
+    pts.push([lat,lng]);
+  }
+  return pts;
+}
+// Bearing in degrees from north, clockwise. a, b are [lat,lng]
+function bearing(a,b){
+  var dLat=b[0]-a[0],dLng=b[1]-a[1];
+  return Math.atan2(dLng,dLat)*180/Math.PI;
+}
+// Make an SVG dot/point marker at the destination end (replaces arrow)
+function arrowIcon(angle,color,darkC,size){
+  size=size||10;
+  var r=(size-2)/2;
+  var svg='<svg viewBox="0 0 '+size+' '+size+'" width="'+size+'" height="'+size+'" style="display:block"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="'+color+'" stroke="'+darkC+'" stroke-width="1.3"/></svg>';
+  return L.divIcon({className:'arrow-mk',html:svg,iconSize:[size,size],iconAnchor:[size/2,size/2]});
+}
+
+// ================== ROAD: filters + render ==================
+function applyRoadFilters(){
+  roadFiltered=ROAD_ROUTES.filter(function(r){
+    if(R_sel.phase.size&&!R_sel.phase.has(r.phase))return false;
+    if(R_sel.lane.size&&!R_sel.lane.has(r.lane))return false;
+    if(R_sel.org.size&&!R_sel.org.has(r.origin))return false;
+    if(R_sel.dst.size&&!R_sel.dst.has(r.dest))return false;
+    if(R_sel.tat.size&&!R_sel.tat.has(r.tat))return false;
+    if(R_sel.st.size&&!R_sel.st.has(r.status))return false;
+    if(R_sel.typ.size&&!R_sel.typ.has(r.type))return false;
+    if(R_sel.zn.size&&!R_sel.zn.has(r.zone))return false;
+    return true;
+  });
+  updateRoadKPI();
+  if(flowsOn)renderFlows();
+  renderDCs();
+  if(hubsOn)buildHubs();
+  if(pbOn)buildPinBound();
+  if(hbOn)buildHB();
+}
+function updateRoadKPI(){
+  var live=roadFiltered.filter(function(r){return r.status==='Live'}).length;
+  var non=roadFiltered.filter(function(r){return r.status==='Non-live'}).length;
+  var org=new Set(),dst=new Set(),pins=new Set();
+  roadFiltered.forEach(function(r){org.add(r.origin);dst.add(r.dest);(r.pins||[]).forEach(function(p){pins.add(p)})});
+  document.getElementById('kR_routes').textContent=roadFiltered.length.toLocaleString();
+  document.getElementById('kR_live').textContent=live.toLocaleString();
+  document.getElementById('kR_non').textContent=non.toLocaleString();
+  document.getElementById('kR_org').textContent=org.size.toLocaleString();
+  document.getElementById('kR_dst').textContent=dst.size.toLocaleString();
+  document.getElementById('kR_pin').textContent=pins.size.toLocaleString();
+}
+function renderFlows(){
+  if(flowLayer){map.removeLayer(flowLayer);flowLayer=null}
+  if(!flowsOn)return;
+  flowLayer=L.layerGroup();
+  roadFiltered.forEach(function(r){
+    var live=r.status==='Live';
+    var color=live?'#4caf50':'#ff9800',darkC=live?'#1b5e20':'#e65100';
+    var pts=curvedPath([r.oLat,r.oLng],[r.dLat,r.dLng],0.12);
+    var opts={color:color,weight:2.2,opacity:0.75,renderer:cv};
+    if(!live)opts.dashArray='6,4';
+    var pl=L.polyline(pts,opts);
+    // Arrow head at destination end, rotated to last-segment bearing
+    var n=pts.length;
+    var ang=bearing(pts[n-2],pts[n-1]);
+    var arrow=L.marker(pts[n-1],{icon:arrowIcon(ang,color,darkC,14),interactive:false,keyboard:false});
+    pl.on('click',function(){showLanePopup(r,pts[Math.floor(pts.length/2)])});
+    pl.on('mouseover',function(e){e.target.setStyle({weight:4.2,opacity:1});e.target.bringToFront()});
+    pl.on('mouseout',function(e){e.target.setStyle({weight:2.2,opacity:0.75})});
+    r.__pl=pl;
+    flowLayer.addLayer(pl);flowLayer.addLayer(arrow);
+  });
+  flowLayer.addTo(map);
+}
+function renderDCs(){
+  if(dcLayer){map.removeLayer(dcLayer);dcLayer=null}
+  dcLayer=L.layerGroup();
+  // Origin DCs - larger teal circles with yellow ring
+  var origins={},dests={};
+  roadFiltered.forEach(function(r){
+    origins[r.origin]={lat:r.oLat,lng:r.oLng};
+    if(!origins[r.dest])dests[r.dest]={lat:r.dLat,lng:r.dLng};
+  });
+  // Remove dests that are also origins
+  Object.keys(origins).forEach(function(k){delete dests[k]});
+  Object.keys(dests).forEach(function(n){
+    var d=dests[n];
+    var m=L.circleMarker([d.lat,d.lng],{radius:3.5,fillColor:'#6a1b9a',color:'#fff',weight:1,fillOpacity:0.9,renderer:cv});
+    m.bindTooltip(n,{direction:'top',className:'dc-tip'});
+    m.on('click',function(){showDCPopup(n,d.lat,d.lng,false)});
+    dcLayer.addLayer(m);
+  });
+  Object.keys(origins).forEach(function(n){
+    var d=origins[n];
+    var m1=L.circleMarker([d.lat,d.lng],{radius:9,fillColor:'#C8C820',color:'#C8C820',weight:1,fillOpacity:0.3,renderer:cv});
+    var m2=L.circleMarker([d.lat,d.lng],{radius:5.5,fillColor:'#0B9B8A',color:'#fff',weight:1.5,fillOpacity:1,renderer:cv});
+    m2.bindTooltip('<strong>'+n+'</strong>',{direction:'top',className:'dc-tip'});
+    m2.on('click',function(){showDCPopup(n,d.lat,d.lng,true)});
+    dcLayer.addLayer(m1);dcLayer.addLayer(m2);
+  });
+  dcLayer.addTo(map);
+}
+function showLanePopup(r,latlng){
+  var live=r.status==='Live';var col=live?'#4caf50':'#ff9800',dc=live?'#1b5e20':'#e65100';
+  var hc=(r.hubs||[]).length;var pc=(r.pins||[]).length;
+  var sb='<div style="text-align:center"><span class="spb" style="background:'+col+';color:#fff;border:2px solid '+dc+'">'+r.status+'</span></div>';
+  var rows='';
+  [['Lane',r.lane],['Phase',r.phase],['Origin DC',r.origin],['Destination DC',r.dest],['TAT',r.tat],['Type of Lane',r.type],['Zone',r.zone],['Pincodes',pc.toLocaleString()],['LM Hubs',hc.toLocaleString()]].forEach(function(kv){if(kv[1]!==''&&kv[1]!==undefined)rows+='<tr><td>'+kv[0]+'</td><td>'+kv[1]+'</td></tr>'});
+  L.popup({maxWidth:320}).setLatLng(latlng).setContent('<div class="pt">'+r.origin+' → '+r.dest+'</div>'+sb+'<table class="ptbl">'+rows+'</table>').openOn(map);
+}
+function showDCPopup(name,lat,lng,isOrigin){
+  var out=ROAD_ROUTES.filter(function(r){return r.origin===name});
+  var incoming=ROAD_ROUTES.filter(function(r){return r.dest===name});
+  var outL=out.filter(function(r){return r.status==='Live'}).length;
+  var outN=out.length-outL;
+  var inL=incoming.filter(function(r){return r.status==='Live'}).length;
+  var inN=incoming.length-inL;
+  var rows='<tr><td>DC Type</td><td>'+(isOrigin?'Origin Hub':'Destination')+'</td></tr>'+
+    '<tr><td>Outgoing Lanes</td><td>'+out.length+' (<span style="color:#1b5e20">'+outL+' Live</span> + <span style="color:#e65100">'+outN+' Non-Live</span>)</td></tr>'+
+    '<tr><td>Incoming Lanes</td><td>'+incoming.length+' (<span style="color:#1b5e20">'+inL+' Live</span> + <span style="color:#e65100">'+inN+' Non-Live</span>)</td></tr>';
+  var btn=isOrigin?'<div style="text-align:center;margin-top:6px"><button onclick="focusOrigin(\''+name.replace(/\'/g,"\\'")+'\')" style="padding:4px 10px;background:#0B9B8A;color:#fff;border:none;border-radius:5px;font-size:9px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif">Show only this DC\'s lanes</button></div>':'';
+  L.popup({maxWidth:280}).setLatLng([lat,lng]).setContent('<div class="pt">'+name+'</div><table class="ptbl">'+rows+'</table>'+btn).openOn(map);
+}
+function focusOrigin(name){
+  cMS('R_orgW');
+  // Check the matching checkbox
+  document.getElementById('R_orgW').querySelectorAll('.ms-i').forEach(function(el){
+    var lbl=el.querySelector('label');if(lbl&&lbl.textContent===name)el.querySelector('input').checked=true;
+  });
+  aMS('R_orgW');
+  map.closePopup();
+  // Fit bounds to all lanes
+  var bounds=[];
+  roadFiltered.forEach(function(r){bounds.push([r.oLat,r.oLng],[r.dLat,r.dLng])});
+  if(bounds.length)map.fitBounds(bounds,{padding:[60,60]});
+}
+
+// ================== LAYERS: Hubs, Pincode Boundaries, Hub Boundary ==================
+function buildHubs(){
+  hubLayer.clearLayers();
+  var seen=new Set();
+  roadFiltered.forEach(function(r){
+    (r.hubs||[]).forEach(function(h){
+      if(seen.has(h.n))return;seen.add(h.n);
+      var live=r.status==='Live';var fill=live?'#4caf50':'#ff9800',bord=live?'#1b5e20':'#e65100';
+      var icon=L.divIcon({className:'hub-home-icon',html:'<svg viewBox="0 0 24 24" width="14" height="14"><path d="M3 21V10l9-7 9 7v11H14v-6h-4v6z" fill="'+fill+'" stroke="'+bord+'" stroke-width="1.5" stroke-linejoin="round"/></svg>',iconSize:[14,14],iconAnchor:[7,14],popupAnchor:[0,-14]});
+      var pop='<div style="text-align:center"><div style="font-size:11px;font-weight:800;color:var(--teal);margin-bottom:2px">LM Hub</div></div><table class="ptbl"><tr><td>Name</td><td style="font-weight:700">'+h.n+'</td></tr><tr><td>Lane</td><td>'+r.lane+'</td></tr><tr><td>Pincodes</td><td>'+(h.p||[]).length+'</td></tr><tr><td>Zone</td><td>'+r.zone+'</td></tr></table>';
+      hubLayer.addLayer(L.marker([h.lat,h.lng],{icon:icon}).bindPopup(pop,{maxWidth:260}));
+    });
+  });
+}
+function toggleHubs(){
+  var b=document.getElementById('hubBtn');
+  if(hubsOn){map.removeLayer(hubLayer);hubsOn=false;b.classList.remove('on');b.textContent='Show LM Hubs'}
+  else{buildHubs();hubLayer.addTo(map);hubsOn=true;b.classList.add('on');b.textContent='Hide LM Hubs'}
+}
+function toggleFlows(){
+  flowsOn=!flowsOn;
+  var b=document.getElementById('flowBtn');
+  b.classList.toggle('on',flowsOn);
+  b.textContent=flowsOn?'Hide Lane Arrows':'Show Lane Arrows';
+  if(flowsOn)renderFlows();else if(flowLayer){map.removeLayer(flowLayer);flowLayer=null}
+}
+function togglePinBound(){
+  if(!gjD){alert('Upload pincode boundaries GeoJSON first (button in header).');return}
+  pbOn=!pbOn;
+  var b=document.getElementById('pbBtn');b.classList.toggle('on',pbOn);b.textContent=pbOn?'Hide Pincode Boundaries':'Pincode Boundaries';
+  if(pbOn){buildPinBound();pbLayer.addTo(map)}else if(pbLayer){map.removeLayer(pbLayer)}
+}
+function buildPinBound(){
+  if(!pbLayer)pbLayer=L.layerGroup();
+  pbLayer.clearLayers();
+  var fp=new Set();roadFiltered.forEach(function(r){(r.pins||[]).forEach(function(p){fp.add(p)})});
+  var ft=[];
+  gjD.features.forEach(function(f){
+    var pin=String(f.properties.pincode||f.properties.Pincode||f.properties.PINCODE||f.properties.pin||f.properties.PIN_CODE||f.properties.pc||'').trim().split('.')[0];
+    if(!pin||!fp.has(pin))return;
+    ft.push(f);
+  });
+  if(!ft.length)return;
+  var gl=L.geoJSON({type:'FeatureCollection',features:ft},{
+    renderer:cv,
+    style:function(f){
+      var pin=String(f.properties.pincode||f.properties.Pincode||f.properties.PINCODE||f.properties.pin||f.properties.PIN_CODE||f.properties.pc||'').trim().split('.')[0];
+      var routes=PIN_IDX[pin]||[];
+      var live=routes.some(function(r){return r.status==='Live'&&roadFiltered.indexOf(r)!==-1});
+      return{fillColor:live?'#4caf50':'#ff9800',weight:0.8,opacity:0.9,color:live?'#1b5e20':'#e65100',fillOpacity:0.35};
+    },
+    onEachFeature:function(f,l){
+      var pin=String(f.properties.pincode||f.properties.Pincode||f.properties.PINCODE||f.properties.pin||f.properties.PIN_CODE||f.properties.pc||'').trim().split('.')[0];
+      var routes=PIN_IDX[pin]||[];
+      var rows='';
+      routes.forEach(function(r){rows+='<tr><td>'+r.lane+'</td><td>'+r.status+'</td></tr>'});
+      l.bindPopup('<div class="pt">Pincode '+pin+'</div><table class="ptbl"><tr><td>Lanes</td><td>'+routes.length+'</td></tr>'+rows+'</table>',{maxWidth:300});
+    }
+  });
+  pbLayer.addLayer(gl);
+}
+function toggleHB(){
+  if(!gjD){alert('Upload pincode boundaries GeoJSON first (button in header).');return}
+  hbOn=!hbOn;
+  var b=document.getElementById('hbBtn');b.classList.toggle('on',hbOn);
+  document.getElementById('hbLeg').classList.toggle('show',hbOn);
+  if(hbOn){buildHB();hbLayer.addTo(map)}else{map.removeLayer(hbLayer)}
+}
+function buildHB(){
+  hbLayer.clearLayers();
+  var b=document.getElementById('hbBtn');b.textContent='Building...';
+  setTimeout(function(){
+    var fp=new Set();roadFiltered.forEach(function(r){(r.pins||[]).forEach(function(p){fp.add(p)})});
+    var hubsInFilter={};
+    roadFiltered.forEach(function(r){(r.hubs||[]).forEach(function(h){
+      if(!hubsInFilter[h.n])hubsInFilter[h.n]={h:h,r:r,pins:[]};
+      hubsInFilter[h.n].pins=hubsInFilter[h.n].pins.concat(h.p||[]);
+    })});
+    var pinToHub={};
+    Object.keys(hubsInFilter).forEach(function(hn){hubsInFilter[hn].pins.forEach(function(p){pinToHub[p]=hn})});
+    var hp={};
+    gjD.features.forEach(function(f){
+      var pin=String(f.properties.pincode||f.properties.Pincode||f.properties.PINCODE||f.properties.pin||f.properties.PIN_CODE||f.properties.pc||'').trim().split('.')[0];
+      if(!pin||!fp.has(pin))return;
+      var hn=pinToHub[pin];if(!hn)return;
+      if(!hp[hn])hp[hn]=[];hp[hn].push(f);
+    });
+    Object.keys(hp).forEach(function(hn){
+      var features=hp[hn];
+      try{
+        var merged=null;
+        for(var i=0;i<features.length;i++){
+          var poly=turf.feature(features[i].geometry);
+          if(!merged){merged=poly;continue}
+          try{merged=turf.union(turf.featureCollection([merged,poly]))}catch(e){}
+        }
+        if(merged){
+          var info=hubsInFilter[hn];var r=info.r;
+          L.geoJSON(merged,{
+            style:{color:'#1b5e20',weight:2.5,fillColor:'#1b5e20',fillOpacity:0.06,dashArray:'6,4'},
+            onEachFeature:function(feat,layer){
+              layer.bindPopup('<div class="pt" style="color:#1b5e20">Hub Boundary</div><table class="ptbl"><tr><td>Hub</td><td style="color:#1b5e20;font-weight:700">'+hn+'</td></tr><tr><td>Lane</td><td>'+r.lane+'</td></tr><tr><td>Status</td><td>'+r.status+'</td></tr><tr><td>Pincodes</td><td>'+features.length+'</td></tr></table>',{maxWidth:300});
+            }
+          }).addTo(hbLayer);
+        }
+      }catch(e){}
+    });
+    b.textContent=hbOn?'Hide Hub Boundary':'Hub Boundary (merged)';
+  },50);
+}
+
+// ================== AIR: filters + render ==================
+function applyAirFilters(){
+  airFiltered=AIR_ROUTES.filter(function(r){
+    if(A_sel.org.size&&!A_sel.org.has(r.origin))return false;
+    if(A_sel.dst.size&&!A_sel.dst.has(r.dest))return false;
+    if(A_sel.ct.size&&!A_sel.ct.has(r.connType))return false;
+    return true;
+  });
+  updateAirKPI();renderAirFlows();
+}
+function updateAirKPI(){
+  var live=airFiltered.filter(function(r){return r.status==='Live'}).length;
+  var non=airFiltered.length-live;
+  var org=new Set(),dst=new Set();
+  airFiltered.forEach(function(r){org.add(r.origin);dst.add(r.dest)});
+  document.getElementById('kA_routes').textContent=airFiltered.length.toLocaleString();
+  document.getElementById('kA_live').textContent=live.toLocaleString();
+  document.getElementById('kA_non').textContent=non.toLocaleString();
+  document.getElementById('kA_org').textContent=org.size.toLocaleString();
+  document.getElementById('kA_dst').textContent=dst.size.toLocaleString();
+}
+function renderAirFlows(){
+  if(airLayer){map.removeLayer(airLayer);airLayer=null}
+  airLayer=L.layerGroup();
+  // Cities
+  var cities={};
+  airFiltered.forEach(function(r){
+    cities[r.origin]={lat:r.oLat,lng:r.oLng,isOrg:true};
+    if(!cities[r.dest])cities[r.dest]={lat:r.dLat,lng:r.dLng,isOrg:false};
+    else cities[r.origin].isOrg=true;
+  });
+  // Air routes (more curve than road)
+  airFiltered.forEach(function(r){
+    var live=r.status==='Live';
+    var color=live?'#4caf50':'#ff9800',darkC=live?'#1b5e20':'#e65100';
+    var pts=curvedPath([r.oLat,r.oLng],[r.dLat,r.dLng],0.2);
+    var opts={color:color,weight:2.5,opacity:0.85,renderer:cv};
+    if(!live)opts.dashArray='8,5';
+    var pl=L.polyline(pts,opts);
+    var n=pts.length;
+    var ang=bearing(pts[n-2],pts[n-1]);
+    var arrow=L.marker(pts[n-1],{icon:arrowIcon(ang,color,darkC,16),interactive:false,keyboard:false});
+    pl.on('click',function(){showAirPopup(r,pts[Math.floor(pts.length/2)])});
+    pl.on('mouseover',function(e){e.target.setStyle({weight:4.5,opacity:1});e.target.bringToFront()});
+    pl.on('mouseout',function(e){e.target.setStyle({weight:2.5,opacity:0.85})});
+    airLayer.addLayer(pl);airLayer.addLayer(arrow);
+  });
+  // City markers
+  Object.keys(cities).forEach(function(n){
+    var c=cities[n];
+    if(c.isOrg){
+      airLayer.addLayer(L.circleMarker([c.lat,c.lng],{radius:9,fillColor:'#C8C820',color:'#C8C820',weight:1,fillOpacity:0.3,renderer:cv}));
+      var m=L.circleMarker([c.lat,c.lng],{radius:5.5,fillColor:'#0B9B8A',color:'#fff',weight:1.5,fillOpacity:1,renderer:cv});
+      m.bindTooltip('<strong>'+n+'</strong> (Origin)',{direction:'top'});
+      airLayer.addLayer(m);
+    }else{
+      var m=L.circleMarker([c.lat,c.lng],{radius:4.5,fillColor:'#6a1b9a',color:'#fff',weight:1.2,fillOpacity:1,renderer:cv});
+      m.bindTooltip(n,{direction:'top'});
+      airLayer.addLayer(m);
+    }
+  });
+  airLayer.addTo(map);
+}
+function showAirPopup(r,latlng){
+  var live=r.status==='Live';var col=live?'#4caf50':'#ff9800',dc=live?'#1b5e20':'#e65100';
+  var sb='<div style="text-align:center"><span class="spb" style="background:'+col+';color:#fff;border:2px solid '+dc+'">'+r.connType+'</span></div>';
+  var rows='<tr><td>Origin</td><td>'+r.origin+'</td></tr><tr><td>Destination</td><td>'+r.dest+'</td></tr><tr><td>Connection Type</td><td>'+r.connType+'</td></tr><tr><td>Status</td><td>'+r.status+'</td></tr>';
+  L.popup({maxWidth:280}).setLatLng(latlng).setContent('<div class="pt">'+r.origin+' → '+r.dest+'</div>'+sb+'<table class="ptbl">'+rows+'</table>').openOn(map);
+}
+
+// ================== LEGEND ==================
+function buildLegend(){
+  var html;
+  if(currentTab==='road'){
+    html='<h4>Lane Status</h4>'+
+      '<div class="li"><div class="lc" style="background:#4caf50"></div>Live</div>'+
+      '<div class="li"><div class="lc" style="background:#ff9800;background-image:linear-gradient(90deg,#ff9800 50%,transparent 50%);background-size:6px 3px"></div>Non-Live (dashed)</div>'+
+      '<h4 style="margin-top:6px">Locations</h4>'+
+      '<div class="li"><div class="ld" style="background:#0B9B8A;box-shadow:0 0 0 3px rgba(200,200,32,.4)"></div>Origin DC</div>'+
+      '<div class="li"><div class="ld" style="background:#6a1b9a"></div>Destination DC</div>'+
+      '<h4 style="margin-top:6px">LM Hub</h4>'+
+      '<div class="li"><svg viewBox="0 0 24 24" width="10" height="10"><path d="M3 21V10l9-7 9 7v11H14v-6h-4v6z" fill="#4caf50" stroke="#1b5e20" stroke-width="1.5"/></svg> Live lane hub</div>'+
+      '<div class="li"><svg viewBox="0 0 24 24" width="10" height="10"><path d="M3 21V10l9-7 9 7v11H14v-6h-4v6z" fill="#ff9800" stroke="#e65100" stroke-width="1.5"/></svg> Non-Live lane hub</div>';
+  }else{
+    html='<h4>Air Connection</h4>'+
+      '<div class="li"><div class="lc" style="background:#4caf50"></div>Live</div>'+
+      '<div class="li"><div class="lc" style="background:#ff9800;background-image:linear-gradient(90deg,#ff9800 50%,transparent 50%);background-size:8px 3px"></div>Future Lanes (dashed)</div>'+
+      '<h4 style="margin-top:6px">Cities</h4>'+
+      '<div class="li"><div class="ld" style="background:#0B9B8A;box-shadow:0 0 0 3px rgba(200,200,32,.4)"></div>Origin (hub city)</div>'+
+      '<div class="li"><div class="ld" style="background:#6a1b9a"></div>Destination only</div>';
+  }
+  document.getElementById('leg').innerHTML=html;
+}
+
+// ================== SEARCH ==================
+function searchDC(){
+  var v=document.getElementById('sDc').value.trim();if(!v)return;
+  var vl=v.toLowerCase();
+  var match=DC_LIST.filter(function(d){return d.name.toLowerCase().includes(vl)});
+  if(!match.length){alert('DC "'+v+'" not found');return}
+  var d=match[0];
+  map.flyTo([d.lat,d.lng],8,{duration:0.8});
+  setTimeout(function(){showDCPopup(d.name,d.lat,d.lng,ROAD_ROUTES.some(function(r){return r.origin===d.name}))},900);
+}
+function searchPin(){
+  var v=document.getElementById('sP').value.trim();if(!v)return;
+  var routes=PIN_IDX[v];
+  if(!routes||!routes.length){alert('Pincode '+v+' not found');return}
+  if(gjD&&pbLayer&&pbOn){
+    var found=false;
+    pbLayer.eachLayer(function(gl){
+      if(found)return;
+      gl.eachLayer&&gl.eachLayer(function(l){
+        if(found)return;
+        var pin=String(l.feature.properties.pincode||l.feature.properties.Pincode||l.feature.properties.PINCODE||l.feature.properties.pin||l.feature.properties.PIN_CODE||l.feature.properties.pc||'').trim().split('.')[0];
+        if(pin===v){found=true;map.fitBounds(l.getBounds(),{maxZoom:12});l.setStyle({weight:3,color:'#D4CF1F',fillOpacity:0.8});setTimeout(function(){l.fire('click')},300)}
+      });
+    });
+    if(found)return;
+  }
+  // Fallback: show the lanes containing this pincode
+  var r=routes[0];
+  var info='Pincode '+v+' is served by:\n\n'+routes.map(function(rr){return'• '+rr.lane+' ('+rr.status+', '+rr.tat+')'}).join('\n');
+  alert(info);
+  map.flyTo([(r.oLat+r.dLat)/2,(r.oLng+r.dLng)/2],7,{duration:0.8});
+}
+function searchHub(){
+  var v=document.getElementById('sH').value.trim();if(!v)return;var vl=v.toLowerCase();
+  var hns=Object.keys(HUB_IDX).filter(function(h){return h.toLowerCase().includes(vl)});
+  if(!hns.length){alert('Hub "'+v+'" not found');return}
+  var h=HUB_IDX[hns[0]];
+  if(h.lat&&h.lng)map.flyTo([h.lat,h.lng],10,{duration:0.8});
+  if(gjD&&pbLayer&&pbOn){
+    if(hsLayer){map.removeLayer(hsLayer);hsLayer=null}
+    var sl=L.layerGroup(),pins=new Set(h.pins);
+    pbLayer.eachLayer(function(gl){
+      gl.eachLayer&&gl.eachLayer(function(l){
+        var pin=String(l.feature.properties.pincode||l.feature.properties.Pincode||l.feature.properties.PINCODE||l.feature.properties.pin||l.feature.properties.PIN_CODE||l.feature.properties.pc||'').trim().split('.')[0];
+        if(pins.has(pin))sl.addLayer(L.geoJSON(l.feature,{style:{fillColor:'#D4CF1F',fillOpacity:0.4,weight:2.5,color:'#c8c400'}}));
+      });
+    });
+    sl.addTo(map);hsLayer=sl;
+    setTimeout(function(){if(hsLayer){map.removeLayer(hsLayer);hsLayer=null}},8000);
+  }else{
+    alert(hns[0]+'\n\nPincodes served: '+h.pins.length+'\nLanes: '+h.routes.map(function(r){return r.lane}).join(', '));
+  }
+}
+function searchAirCity(){
+  var v=document.getElementById('sAc').value.trim();if(!v)return;var vl=v.toLowerCase();
+  var match=null;
+  AIR_ROUTES.forEach(function(r){
+    if(!match&&r.origin.toLowerCase().includes(vl))match={lat:r.oLat,lng:r.oLng,n:r.origin};
+    if(!match&&r.dest.toLowerCase().includes(vl))match={lat:r.dLat,lng:r.dLng,n:r.dest};
+  });
+  if(!match){alert('City "'+v+'" not found');return}
+  map.flyTo([match.lat,match.lng],6,{duration:0.8});
+}
+
+// ================== TAB SWITCH ==================
+function switchTab(t){
+  currentTab=t;
+  document.getElementById('tabRoad').classList.toggle('active',t==='road');
+  document.getElementById('tabAir').classList.toggle('active',t==='air');
+  document.getElementById('sbRoad').style.display=(t==='road')?'flex':'none';
+  document.getElementById('sbAir').style.display=(t==='air')?'flex':'none';
+  document.getElementById('kpiRoad').style.display=(t==='road')?'flex':'none';
+  document.getElementById('kpiAir').style.display=(t==='air')?'flex':'none';
+  document.getElementById('geoBtn').style.display=(t==='road')?'flex':'none';
+  // Clear layers not in use
+  [flowLayer,hubLayer,pbLayer,hbLayer,hsLayer,dcLayer,airLayer].forEach(function(l){if(l)map.removeLayer(l)});
+  hsLayer=null;
+  if(t==='road'){applyRoadFilters()}
+  else{applyAirFilters()}
+  buildLegend();
+  document.getElementById('hbLeg').classList.remove('show');
+}
+
+// ================== MAP / UTIL ==================
+function toggleSB(id){var sb=document.getElementById(id);sb.classList.toggle('collapsed');sb.querySelector('.sb-tog').innerHTML=sb.classList.contains('collapsed')?'&#9654;':'&#9664;'}
+function setProg(p,l){document.getElementById('pf').style.width=p+'%';if(l)document.getElementById('pl').textContent=l}
+document.addEventListener('click',function(e){if(!e.target.closest('.ms-w'))document.querySelectorAll('.ms-d').forEach(function(d){d.classList.remove('show')})});
+
+// ================== GEOJSON UPLOAD ==================
+document.getElementById('geoIn').addEventListener('change',function(e){
+  var f=e.target.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(ev){try{gjD=JSON.parse(ev.target.result);alert('GeoJSON loaded: '+(gjD.features||[]).length.toLocaleString()+' boundaries. Toggle "Pincode Boundaries" or "Hub Boundary" to view.')}catch(err){alert('GeoJSON Error: '+err.message)}};
+  r.readAsText(f);
+});
+
+// ================== BOOT ==================
+function buildAllFilters(){
+  var rCounts={phase:{},lane:{},org:{},dst:{},tat:{},st:{},typ:{},zn:{}};
+  ROAD_ROUTES.forEach(function(r){
+    if(r.phase)rCounts.phase[r.phase]=(rCounts.phase[r.phase]||0)+1;
+    if(r.lane)rCounts.lane[r.lane]=(rCounts.lane[r.lane]||0)+1;
+    if(r.origin)rCounts.org[r.origin]=(rCounts.org[r.origin]||0)+1;
+    if(r.dest)rCounts.dst[r.dest]=(rCounts.dst[r.dest]||0)+1;
+    if(r.tat)rCounts.tat[r.tat]=(rCounts.tat[r.tat]||0)+1;
+    if(r.status)rCounts.st[r.status]=(rCounts.st[r.status]||0)+1;
+    if(r.type)rCounts.typ[r.type]=(rCounts.typ[r.type]||0)+1;
+    if(r.zone)rCounts.zn[r.zone]=(rCounts.zn[r.zone]||0)+1;
+  });
+  var sortKeys=function(o){return Object.keys(o).sort()};
+  var phaseOrder=['Phase 0','Phase 1','Phase 2','Phase 3','Phase 4','Next phase launch'];
+  buildMS('R_phaseW',sortKeys(rCounts.phase).sort(function(a,b){var ia=phaseOrder.indexOf(a),ib=phaseOrder.indexOf(b);if(ia===-1)ia=99;if(ib===-1)ib=99;return ia-ib}),rCounts.phase);
+  buildMS('R_laneW',sortKeys(rCounts.lane),rCounts.lane);
+  buildMS('R_orgW',sortKeys(rCounts.org),rCounts.org);
+  buildMS('R_dstW',sortKeys(rCounts.dst),rCounts.dst);
+  var tatOrder=['D','D1','D1/D2','D2','D3','D4'];
+  buildMS('R_tatW',sortKeys(rCounts.tat).sort(function(a,b){var ia=tatOrder.indexOf(a),ib=tatOrder.indexOf(b);if(ia===-1)ia=99;if(ib===-1)ib=99;return ia-ib}),rCounts.tat);
+  buildMS('R_stW',sortKeys(rCounts.st),rCounts.st,function(s){return s==='Live'?'#4caf50':'#ff9800'});
+  buildMS('R_typW',sortKeys(rCounts.typ),rCounts.typ);
+  buildMS('R_znW',sortKeys(rCounts.zn),rCounts.zn);
+
+  var aCounts={org:{},dst:{},ct:{}};
+  AIR_ROUTES.forEach(function(r){
+    if(r.origin)aCounts.org[r.origin]=(aCounts.org[r.origin]||0)+1;
+    if(r.dest)aCounts.dst[r.dest]=(aCounts.dst[r.dest]||0)+1;
+    if(r.connType)aCounts.ct[r.connType]=(aCounts.ct[r.connType]||0)+1;
+  });
+  buildMS('A_orgW',sortKeys(aCounts.org),aCounts.org);
+  buildMS('A_dstW',sortKeys(aCounts.dst),aCounts.dst);
+  buildMS('A_ctW',sortKeys(aCounts.ct),aCounts.ct,function(s){return s==='Live'?'#4caf50':'#ff9800'});
+}
+
+function showLoadError(err){
+  var msg=err.message||String(err);
+  var pl=document.getElementById('pl');
+  var pw=document.getElementById('pw');
+  document.getElementById('pf').style.background='#c62828';
+  var testURL=sheetURLAlt(ROAD_SHEET_NAME);
+  var shareURL='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/edit';
+
+  var html='<div style="text-align:left;color:#333;font-size:11px;line-height:1.7">'+
+    '<strong style="color:#c62828;font-size:13px">⚠ Can\'t reach Google Sheet</strong><br><br>'+
+    '<strong style="color:#0B9B8A">Quick 1-click test →</strong> <a href="'+testURL+'" target="_blank" style="color:#0B9B8A;text-decoration:underline;font-weight:600">Open the CSV feed</a><br>'+
+    '<span style="color:#888;font-size:10px">• If you see CSV data → sheet is public, this is a browser/network issue<br>'+
+    '• If you see "Sign in" or "No permission" → sheet is <strong>not</strong> public yet</span><br><br>'+
+    '<strong>To fix (1 min):</strong><br>'+
+    '<span style="color:#666">1. <a href="'+shareURL+'" target="_blank" style="color:#0B9B8A">Open the Gsheet</a> → click <strong>Share</strong> (top right)<br>'+
+    '2. Under "General access", change from "Restricted" to <strong>"Anyone with the link"</strong><br>'+
+    '3. Make sure the role is <strong>Viewer</strong> → Done<br>'+
+    '4. Reload this page</span><br>'+
+    '<span style="font-size:9px;color:#aaa">Edit access stays restricted. Public view only means people with the exact link can see it.</span>'+
+    '</div>';
+  html+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid #e8ecf0;text-align:center">'+
+    '<div style="font-size:10px;color:#888;margin-bottom:8px">— or skip Gsheet and work offline —</div>'+
+    '<label style="display:inline-block;padding:8px 16px;background:#0B9B8A;color:#fff;border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;letter-spacing:.3px">'+
+    '📄 UPLOAD XLSX FROM GSHEET'+
+    '<input type="file" id="fallbackXlsx" accept=".xlsx,.xls" style="display:none"></label>'+
+    '<div style="font-size:9px;color:#aaa;margin-top:6px">In Gsheet: File → Download → Microsoft Excel (.xlsx) → upload here</div>'+
+    '</div>'+
+    '<div style="margin-top:10px;font-size:9px;color:#bbb;text-align:center">Technical: '+msg+'</div>';
+  pl.innerHTML=html;
+  pw.style.maxWidth='480px';
+  setTimeout(function(){
+    var inp=document.getElementById('fallbackXlsx');
+    if(inp)inp.addEventListener('change',handleXlsxUpload);
+  },50);
+}
+
+function handleXlsxUpload(e){
+  var f=e.target.files[0];if(!f)return;
+  document.getElementById('pf').style.background='linear-gradient(90deg,#0B9B8A,#12b09e)';
+  setProg(10,'Loading XLSX parser...');
+  if(typeof XLSX!=='undefined'){parseLocalXlsx(f);return}
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload=function(){parseLocalXlsx(f)};
+  s.onerror=function(){showLoadError(new Error('Could not load XLSX parser from CDN. Check internet connection.'))};
+  document.head.appendChild(s);
+}
+
+function parseLocalXlsx(f){
+  setProg(30,'Reading XLSX...');
+  var rd=new FileReader();
+  rd.onload=function(ev){
+    try{
+      var wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+      var roadSheet=wb.Sheets[ROAD_SHEET_NAME];
+      var airSheet=wb.Sheets[AIR_SHEET_NAME];
+      if(!roadSheet)throw new Error('Sheet "'+ROAD_SHEET_NAME+'" not found in XLSX. Found: '+wb.SheetNames.join(', '));
+      setProg(50,'Parsing road data...');
+      var roadRows=XLSX.utils.sheet_to_json(roadSheet,{header:1,defval:null,raw:true});
+      ROAD_ROUTES=parseRoadData(roadRows);
+      if(airSheet){
+        setProg(65,'Parsing air data...');
+        var airRows=XLSX.utils.sheet_to_json(airSheet,{header:1,defval:null,raw:true});
+        AIR_ROUTES=parseAirData(airRows);
+      }
+      DC_LIST=buildDCList(ROAD_ROUTES);
+      buildIndexes();
+      setProg(85,'Building filters ('+ROAD_ROUTES.length+' lanes)...');
+      buildAllFilters();
+      setProg(95,'Rendering...');
+      // Show the app container FIRST so the map gets real size, THEN render
+      document.getElementById('app').style.display='flex';
+      document.getElementById('lo').classList.add('hide');
+      setTimeout(function(){
+        try{
+          map.invalidateSize();
+          applyRoadFilters();
+          buildLegend();
+        }catch(renderErr){
+          console.error('Render error:',renderErr);
+          document.getElementById('lo').classList.remove('hide');
+          showLoadError(renderErr);
+        }
+      },150);
+    }catch(err){showLoadError(err)}
+  };
+  rd.onerror=function(){showLoadError(new Error('Could not read file.'))};
+  rd.readAsArrayBuffer(f);
+}
+
+function boot(){
+  setProg(5,'Initializing map...');
+  cv=L.canvas({padding:0.5});
+  map=L.map('map',{zoomControl:true,preferCanvas:true,renderer:cv,minZoom:4}).setView([22.5,82],5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'&copy; OSM &copy; CartoDB',maxZoom:18,subdomains:'abcd'}).addTo(map);
+  hubLayer=L.layerGroup();hbLayer=L.layerGroup();
+
+  setProg(20,'Fetching road data from Google Sheet...');
+  fetchSheet(ROAD_SHEET_NAME).then(function(rows){
+    setProg(45,'Parsing '+rows.length.toLocaleString()+' road rows...');
+    ROAD_ROUTES=parseRoadData(rows);
+    setProg(60,'Fetching air data from Google Sheet...');
+    return fetchSheet(AIR_SHEET_NAME);
+  }).then(function(rows){
+    setProg(75,'Parsing air data...');
+    AIR_ROUTES=parseAirData(rows);
+    DC_LIST=buildDCList(ROAD_ROUTES);
+    buildIndexes();
+    setProg(85,'Building filters ('+ROAD_ROUTES.length+' lanes, '+AIR_ROUTES.length+' air routes)...');
+    buildAllFilters();
+    setProg(95,'Rendering network...');
+    document.getElementById('app').style.display='flex';
+    document.getElementById('lo').classList.add('hide');
+    setTimeout(function(){
+      try{
+        map.invalidateSize();
+        applyRoadFilters();
+        buildLegend();
+      }catch(renderErr){
+        console.error('Render error:',renderErr);
+        document.getElementById('lo').classList.remove('hide');
+        showLoadError(renderErr);
+      }
+    },150);
+  }).catch(function(err){
+    console.error(err);
+    showLoadError(err);
+  });
+}
+boot();
+</script>
+</body>
+</html>
