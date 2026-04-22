@@ -515,7 +515,7 @@ function renderFlows(){
       if(!live)opts.dashArray='6,4';
       var pl=L.polyline(pts,opts);
       var n=pts.length;
-      var arrow=L.circleMarker(pts[n-1],{radius:2,fillColor:color,color:color,weight:0,fillOpacity:1,renderer:cv,interactive:false});
+      var arrow=L.circleMarker(pts[n-1],{radius:1.5,fillColor:color,color:color,weight:0,fillOpacity:1,renderer:cv,interactive:false});
       pl.on('click',function(){showLanePopup(r,pts[Math.floor(pts.length/2)])});
       pl.on('mouseover',function(e){e.target.setStyle({weight:4.2,opacity:1});e.target.bringToFront()});
       pl.on('mouseout',function(e){e.target.setStyle({weight:2.2,opacity:0.75})});
@@ -748,7 +748,7 @@ function renderAirFlows(){
     if(!live)opts.dashArray='8,5';
     var pl=L.polyline(pts,opts);
     var n=pts.length;
-    var arrow=L.circleMarker(pts[n-1],{radius:2.5,fillColor:color,color:color,weight:0,fillOpacity:1,renderer:cv,interactive:false});
+    var arrow=L.circleMarker(pts[n-1],{radius:2,fillColor:color,color:color,weight:0,fillOpacity:1,renderer:cv,interactive:false});
     pl.on('click',function(){showAirPopup(r,pts[Math.floor(pts.length/2)])});
     pl.on('mouseover',function(e){e.target.setStyle({weight:4.5,opacity:1});e.target.bringToFront()});
     pl.on('mouseout',function(e){e.target.setStyle({weight:2.5,opacity:0.85})});
@@ -1035,7 +1035,7 @@ function parseLocalXlsx(f){
 }
 
 function boot(){
-  console.log('%c🗺 Zonal Prime Map View · v2.2','color:#0B9B8A;font-weight:700;font-size:14px');
+  console.log('%c🗺 Zonal Prime Map View · v2.3','color:#0B9B8A;font-weight:700;font-size:14px');
   setProg(5,'Initializing map...');
   cv=L.canvas({padding:0.5});
   map=L.map('map',{zoomControl:true,preferCanvas:true,renderer:cv,minZoom:4}).setView([22.5,82],5);
