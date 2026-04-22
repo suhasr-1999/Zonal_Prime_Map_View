@@ -304,17 +304,20 @@ function fetchSheet(name){
 }
 
 function parseRoadData(rows){
-  var od={};
+  var od={};var skipped=0;
   for(var i=1;i<rows.length;i++){
-    var row=rows[i];
-    var phase=(row[0]||'').trim(),lane=(row[1]||'').trim(),origin=(row[2]||'').trim();
+    var row=rows[i];if(!row)continue;
+    var phase=(row[0]||'').toString().trim(),lane=(row[1]||'').toString().trim(),origin=(row[2]||'').toString().trim();
     var oLat=parseFloat(row[3]),oLng=parseFloat(row[4]);
-    var dest=(row[5]||'').trim();
+    var dest=(row[5]||'').toString().trim();
     var dLat=parseFloat(row[6]),dLng=parseFloat(row[7]);
-    var pin=row[9],hub=(row[10]||'').trim();
+    var pin=row[9],hub=(row[10]||'').toString().trim();
     var hLat=parseFloat(row[11]),hLng=parseFloat(row[12]);
-    var tat=(row[13]||'').trim(),status=(row[15]||'').trim(),tol=(row[16]||'').trim(),zone=(row[17]||'').trim();
-    if(!origin||!dest||isNaN(oLat)||isNaN(dLat))continue;
+    var tat=(row[13]||'').toString().trim(),status=(row[15]||'').toString().trim(),tol=(row[16]||'').toString().trim(),zone=(row[17]||'').toString().trim();
+    // Strict: need origin, dest AND all 4 coordinates to be valid numbers
+    if(!origin||!dest||isNaN(oLat)||isNaN(oLng)||isNaN(dLat)||isNaN(dLng)){skipped++;continue;}
+    // Sanity: coords must be in India bounds (6–38 lat, 68–98 lng) to catch swapped columns
+    if(oLat<6||oLat>38||dLat<6||dLat>38||oLng<68||oLng>98||dLng<68||dLng>98){skipped++;continue;}
     if(zone==='West ')zone='West';
     if(tol==='Dedicated ')tol='Dedicated';
     if(tol==='ECOM')tol='Ecom';
@@ -326,12 +329,13 @@ function parseRoadData(rows){
     if(pin){
       var pinStr=String(pin).replace(/\..*$/,'').trim();
       od[key].pins.push(pinStr);
-      if(hub&&!isNaN(hLat)&&!isNaN(hLng)){
+      if(hub&&!isNaN(hLat)&&!isNaN(hLng)&&hLat>=6&&hLat<=38&&hLng>=68&&hLng<=98){
         if(!od[key].hubs[hub])od[key].hubs[hub]={n:hub,lat:+hLat.toFixed(5),lng:+hLng.toFixed(5),p:[]};
         od[key].hubs[hub].p.push(pinStr);
       }
     }
   }
+  if(skipped>0)console.warn('parseRoadData: skipped '+skipped+' rows due to missing/invalid coordinates');
   var arr=[];
   Object.keys(od).forEach(function(k){
     var v=od[k];
@@ -501,6 +505,8 @@ function renderFlows(){
   if(!flowsOn)return;
   flowLayer=L.layerGroup();
   roadFiltered.forEach(function(r){
+    // Defensive: skip any route with invalid coords
+    if(isNaN(r.oLat)||isNaN(r.oLng)||isNaN(r.dLat)||isNaN(r.dLng))return;
     var live=r.status==='Live';
     var color=live?'#4caf50':'#ff9800',darkC=live?'#1b5e20':'#e65100';
     var pts=curvedPath([r.oLat,r.oLng],[r.dLat,r.dLng],0.12);
@@ -525,6 +531,7 @@ function renderDCs(){
   // Origin DCs - larger teal circles with yellow ring
   var origins={},dests={};
   roadFiltered.forEach(function(r){
+    if(isNaN(r.oLat)||isNaN(r.oLng)||isNaN(r.dLat)||isNaN(r.dLng))return;
     origins[r.origin]={lat:r.oLat,lng:r.oLng};
     if(!origins[r.dest])dests[r.dest]={lat:r.dLat,lng:r.dLng};
   });
@@ -726,6 +733,7 @@ function renderAirFlows(){
   });
   // Air routes (more curve than road)
   airFiltered.forEach(function(r){
+    if(isNaN(r.oLat)||isNaN(r.oLng)||isNaN(r.dLat)||isNaN(r.dLng))return;
     var live=r.status==='Live';
     var color=live?'#4caf50':'#ff9800',darkC=live?'#1b5e20':'#e65100';
     var pts=curvedPath([r.oLat,r.oLng],[r.dLat,r.dLng],0.2);
@@ -921,24 +929,35 @@ function buildAllFilters(){
 
 function showLoadError(err){
   var msg=err.message||String(err);
+  var isRenderErr=msg.indexOf('LatLng')!==-1||msg.indexOf('invalidateSize')!==-1||msg.indexOf('undefined')!==-1;
   var pl=document.getElementById('pl');
   var pw=document.getElementById('pw');
   document.getElementById('pf').style.background='#c62828';
   var testURL=sheetURLAlt(ROAD_SHEET_NAME);
   var shareURL='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/edit';
 
-  var html='<div style="text-align:left;color:#333;font-size:11px;line-height:1.7">'+
-    '<strong style="color:#c62828;font-size:13px">⚠ Can\'t reach Google Sheet</strong><br><br>'+
-    '<strong style="color:#0B9B8A">Quick 1-click test →</strong> <a href="'+testURL+'" target="_blank" style="color:#0B9B8A;text-decoration:underline;font-weight:600">Open the CSV feed</a><br>'+
-    '<span style="color:#888;font-size:10px">• If you see CSV data → sheet is public, this is a browser/network issue<br>'+
-    '• If you see "Sign in" or "No permission" → sheet is <strong>not</strong> public yet</span><br><br>'+
-    '<strong>To fix (1 min):</strong><br>'+
-    '<span style="color:#666">1. <a href="'+shareURL+'" target="_blank" style="color:#0B9B8A">Open the Gsheet</a> → click <strong>Share</strong> (top right)<br>'+
-    '2. Under "General access", change from "Restricted" to <strong>"Anyone with the link"</strong><br>'+
-    '3. Make sure the role is <strong>Viewer</strong> → Done<br>'+
-    '4. Reload this page</span><br>'+
-    '<span style="font-size:9px;color:#aaa">Edit access stays restricted. Public view only means people with the exact link can see it.</span>'+
-    '</div>';
+  var html;
+  if(isRenderErr){
+    html='<div style="text-align:left;color:#333;font-size:11px;line-height:1.7">'+
+      '<strong style="color:#c62828;font-size:13px">⚠ Rendering failed</strong><br><br>'+
+      'The Google Sheet was fetched successfully, but something in the data caused the map to fail.<br>'+
+      '<span style="color:#666;font-size:10px">Most common cause: a row in the Gsheet is missing Origin Lat/Long or Dest Lat/Long values, or the column order has changed. Open your Gsheet and check that columns A–H are: Phase, Lane, Origin, Origin Lat, Origin Long, Dest., Dest Lat, Dest Long.</span><br><br>'+
+      '<span style="color:#888;font-size:10px">Open the browser console (F12 → Console tab) to see which rows were skipped.</span>'+
+      '</div>';
+  }else{
+    html='<div style="text-align:left;color:#333;font-size:11px;line-height:1.7">'+
+      '<strong style="color:#c62828;font-size:13px">⚠ Can\'t reach Google Sheet</strong><br><br>'+
+      '<strong style="color:#0B9B8A">Quick 1-click test →</strong> <a href="'+testURL+'" target="_blank" style="color:#0B9B8A;text-decoration:underline;font-weight:600">Open the CSV feed</a><br>'+
+      '<span style="color:#888;font-size:10px">• If you see CSV data → sheet is public, this is a browser/network issue<br>'+
+      '• If you see "Sign in" or "No permission" → sheet is <strong>not</strong> public yet</span><br><br>'+
+      '<strong>To fix (1 min):</strong><br>'+
+      '<span style="color:#666">1. <a href="'+shareURL+'" target="_blank" style="color:#0B9B8A">Open the Gsheet</a> → click <strong>Share</strong> (top right)<br>'+
+      '2. Under "General access", change from "Restricted" to <strong>"Anyone with the link"</strong><br>'+
+      '3. Make sure the role is <strong>Viewer</strong> → Done<br>'+
+      '4. Reload this page</span><br>'+
+      '<span style="font-size:9px;color:#aaa">Edit access stays restricted. Public view only means people with the exact link can see it.</span>'+
+      '</div>';
+  }
   html+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid #e8ecf0;text-align:center">'+
     '<div style="font-size:10px;color:#888;margin-bottom:8px">— or skip Gsheet and work offline —</div>'+
     '<label style="display:inline-block;padding:8px 16px;background:#0B9B8A;color:#fff;border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;letter-spacing:.3px">'+
@@ -948,7 +967,7 @@ function showLoadError(err){
     '</div>'+
     '<div style="margin-top:10px;font-size:9px;color:#bbb;text-align:center">Technical: '+msg+'</div>';
   pl.innerHTML=html;
-  pw.style.maxWidth='480px';
+  pw.style.maxWidth='520px';
   setTimeout(function(){
     var inp=document.getElementById('fallbackXlsx');
     if(inp)inp.addEventListener('change',handleXlsxUpload);
