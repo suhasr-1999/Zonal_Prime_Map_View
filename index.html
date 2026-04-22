@@ -515,7 +515,7 @@ function renderFlows(){
       if(!live)opts.dashArray='6,4';
       var pl=L.polyline(pts,opts);
       var n=pts.length;
-      var arrow=L.circleMarker(pts[n-1],{radius:1.5,fillColor:color,color:color,weight:0,fillOpacity:1,renderer:cv,interactive:false});
+      var arrow=L.circleMarker(pts[n-1],{radius:1.2,fillColor:color,color:color,weight:0,fillOpacity:1,renderer:cv,interactive:false});
       pl.on('click',function(){showLanePopup(r,pts[Math.floor(pts.length/2)])});
       pl.on('mouseover',function(e){e.target.setStyle({weight:4.2,opacity:1});e.target.bringToFront()});
       pl.on('mouseout',function(e){e.target.setStyle({weight:2.2,opacity:0.75})});
@@ -530,11 +530,13 @@ function renderDCs(){
   if(dcLayer){map.removeLayer(dcLayer);dcLayer=null}
   dcLayer=L.layerGroup();
   // Origin DCs - larger teal circles with yellow ring
-  var origins={},dests={};
+  var origins={},dests={},destStatus={};
   roadFiltered.forEach(function(r){
     if(isNaN(r.oLat)||isNaN(r.oLng)||isNaN(r.dLat)||isNaN(r.dLng))return;
     origins[r.origin]={lat:r.oLat,lng:r.oLng};
     if(!origins[r.dest])dests[r.dest]={lat:r.dLat,lng:r.dLng};
+    if(!destStatus[r.dest])destStatus[r.dest]={live:false,nonlive:false};
+    if(r.status==='Live')destStatus[r.dest].live=true;else destStatus[r.dest].nonlive=true;
   });
   // Remove dests that are also origins
   Object.keys(origins).forEach(function(k){delete dests[k]});
@@ -542,7 +544,11 @@ function renderDCs(){
     try{
       var d=dests[n];
       if(isNaN(d.lat)||isNaN(d.lng))return;
-      var m=L.circleMarker([d.lat,d.lng],{radius:3.5,fillColor:'#6a1b9a',color:'#fff',weight:1,fillOpacity:0.9,renderer:cv});
+      var st=destStatus[n]||{};
+      // Green if any Live lane terminates here, else orange
+      var fill=st.live?'#4caf50':'#ff9800';
+      var bord=st.live?'#1b5e20':'#e65100';
+      var m=L.circleMarker([d.lat,d.lng],{radius:3,fillColor:fill,color:bord,weight:1,fillOpacity:0.95,renderer:cv});
       m.bindTooltip(n,{direction:'top',className:'dc-tip'});
       m.on('click',function(){showDCPopup(n,d.lat,d.lng,false)});
       dcLayer.addLayer(m);
@@ -731,12 +737,14 @@ function updateAirKPI(){
 function renderAirFlows(){
   if(airLayer){map.removeLayer(airLayer);airLayer=null}
   airLayer=L.layerGroup();
-  // Cities
-  var cities={};
+  // Cities — track which are origins and the statuses terminating at dest-only cities
+  var cities={},destStatus={};
   airFiltered.forEach(function(r){
     cities[r.origin]={lat:r.oLat,lng:r.oLng,isOrg:true};
     if(!cities[r.dest])cities[r.dest]={lat:r.dLat,lng:r.dLng,isOrg:false};
     else cities[r.origin].isOrg=true;
+    if(!destStatus[r.dest])destStatus[r.dest]={live:false,nonlive:false};
+    if(r.status==='Live')destStatus[r.dest].live=true;else destStatus[r.dest].nonlive=true;
   });
   // Air routes (more curve than road)
   airFiltered.forEach(function(r){
@@ -763,7 +771,10 @@ function renderAirFlows(){
       m.bindTooltip('<strong>'+n+'</strong> (Origin)',{direction:'top'});
       airLayer.addLayer(m);
     }else{
-      var m=L.circleMarker([c.lat,c.lng],{radius:4.5,fillColor:'#6a1b9a',color:'#fff',weight:1.2,fillOpacity:1,renderer:cv});
+      var st=destStatus[n]||{};
+      var fill=st.live?'#4caf50':'#ff9800';
+      var bord=st.live?'#1b5e20':'#e65100';
+      var m=L.circleMarker([c.lat,c.lng],{radius:4,fillColor:fill,color:bord,weight:1,fillOpacity:0.95,renderer:cv});
       m.bindTooltip(n,{direction:'top'});
       airLayer.addLayer(m);
     }
@@ -786,7 +797,8 @@ function buildLegend(){
       '<div class="li"><div class="lc" style="background:#ff9800;background-image:linear-gradient(90deg,#ff9800 50%,transparent 50%);background-size:6px 3px"></div>Non-Live (dashed)</div>'+
       '<h4 style="margin-top:6px">Locations</h4>'+
       '<div class="li"><div class="ld" style="background:#0B9B8A;box-shadow:0 0 0 3px rgba(200,200,32,.4)"></div>Origin DC</div>'+
-      '<div class="li"><div class="ld" style="background:#6a1b9a"></div>Destination DC</div>'+
+      '<div class="li"><div class="ld" style="background:#4caf50;border:1px solid #1b5e20"></div>Destination DC (Live lanes)</div>'+
+      '<div class="li"><div class="ld" style="background:#ff9800;border:1px solid #e65100"></div>Destination DC (Non-Live only)</div>'+
       '<h4 style="margin-top:6px">LM Hub</h4>'+
       '<div class="li"><svg viewBox="0 0 24 24" width="10" height="10"><path d="M3 21V10l9-7 9 7v11H14v-6h-4v6z" fill="#4caf50" stroke="#1b5e20" stroke-width="1.5"/></svg> Live lane hub</div>'+
       '<div class="li"><svg viewBox="0 0 24 24" width="10" height="10"><path d="M3 21V10l9-7 9 7v11H14v-6h-4v6z" fill="#ff9800" stroke="#e65100" stroke-width="1.5"/></svg> Non-Live lane hub</div>';
@@ -796,7 +808,8 @@ function buildLegend(){
       '<div class="li"><div class="lc" style="background:#ff9800;background-image:linear-gradient(90deg,#ff9800 50%,transparent 50%);background-size:8px 3px"></div>Future Lanes (dashed)</div>'+
       '<h4 style="margin-top:6px">Cities</h4>'+
       '<div class="li"><div class="ld" style="background:#0B9B8A;box-shadow:0 0 0 3px rgba(200,200,32,.4)"></div>Origin (hub city)</div>'+
-      '<div class="li"><div class="ld" style="background:#6a1b9a"></div>Destination only</div>';
+      '<div class="li"><div class="ld" style="background:#4caf50;border:1px solid #1b5e20"></div>Destination only (Live)</div>'+
+      '<div class="li"><div class="ld" style="background:#ff9800;border:1px solid #e65100"></div>Destination only (Future)</div>';
   }
   document.getElementById('leg').innerHTML=html;
 }
@@ -1035,7 +1048,7 @@ function parseLocalXlsx(f){
 }
 
 function boot(){
-  console.log('%c🗺 Zonal Prime Map View · v2.3','color:#0B9B8A;font-weight:700;font-size:14px');
+  console.log('%c🗺 Zonal Prime Map View · v2.4','color:#0B9B8A;font-weight:700;font-size:14px');
   setProg(5,'Initializing map...');
   cv=L.canvas({padding:0.5});
   map=L.map('map',{zoomControl:true,preferCanvas:true,renderer:cv,minZoom:4}).setView([22.5,82],5);
