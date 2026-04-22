@@ -504,25 +504,27 @@ function renderFlows(){
   if(flowLayer){map.removeLayer(flowLayer);flowLayer=null}
   if(!flowsOn)return;
   flowLayer=L.layerGroup();
+  var failed=0;
   roadFiltered.forEach(function(r){
-    // Defensive: skip any route with invalid coords
-    if(isNaN(r.oLat)||isNaN(r.oLng)||isNaN(r.dLat)||isNaN(r.dLng))return;
-    var live=r.status==='Live';
-    var color=live?'#4caf50':'#ff9800',darkC=live?'#1b5e20':'#e65100';
-    var pts=curvedPath([r.oLat,r.oLng],[r.dLat,r.dLng],0.12);
-    var opts={color:color,weight:2.2,opacity:0.75,renderer:cv};
-    if(!live)opts.dashArray='6,4';
-    var pl=L.polyline(pts,opts);
-    // Arrow head at destination end, rotated to last-segment bearing
-    var n=pts.length;
-    var ang=bearing(pts[n-2],pts[n-1]);
-    var arrow=L.marker(pts[n-1],{icon:arrowIcon(ang,color,darkC,14),interactive:false,keyboard:false});
-    pl.on('click',function(){showLanePopup(r,pts[Math.floor(pts.length/2)])});
-    pl.on('mouseover',function(e){e.target.setStyle({weight:4.2,opacity:1});e.target.bringToFront()});
-    pl.on('mouseout',function(e){e.target.setStyle({weight:2.2,opacity:0.75})});
-    r.__pl=pl;
-    flowLayer.addLayer(pl);flowLayer.addLayer(arrow);
+    try{
+      if(isNaN(r.oLat)||isNaN(r.oLng)||isNaN(r.dLat)||isNaN(r.dLng))return;
+      var live=r.status==='Live';
+      var color=live?'#4caf50':'#ff9800',darkC=live?'#1b5e20':'#e65100';
+      var pts=curvedPath([r.oLat,r.oLng],[r.dLat,r.dLng],0.12);
+      var opts={color:color,weight:2.2,opacity:0.75,renderer:cv};
+      if(!live)opts.dashArray='6,4';
+      var pl=L.polyline(pts,opts);
+      var n=pts.length;
+      var ang=bearing(pts[n-2],pts[n-1]);
+      var arrow=L.marker(pts[n-1],{icon:arrowIcon(ang,color,darkC,14),interactive:false,keyboard:false});
+      pl.on('click',function(){showLanePopup(r,pts[Math.floor(pts.length/2)])});
+      pl.on('mouseover',function(e){e.target.setStyle({weight:4.2,opacity:1});e.target.bringToFront()});
+      pl.on('mouseout',function(e){e.target.setStyle({weight:2.2,opacity:0.75})});
+      r.__pl=pl;
+      flowLayer.addLayer(pl);flowLayer.addLayer(arrow);
+    }catch(e){failed++;console.warn('Route skipped:',r.origin,'→',r.dest,'-',e.message||e);}
   });
+  if(failed)console.warn('renderFlows: '+failed+' route(s) failed (see warnings above)');
   flowLayer.addTo(map);
 }
 function renderDCs(){
@@ -538,19 +540,25 @@ function renderDCs(){
   // Remove dests that are also origins
   Object.keys(origins).forEach(function(k){delete dests[k]});
   Object.keys(dests).forEach(function(n){
-    var d=dests[n];
-    var m=L.circleMarker([d.lat,d.lng],{radius:3.5,fillColor:'#6a1b9a',color:'#fff',weight:1,fillOpacity:0.9,renderer:cv});
-    m.bindTooltip(n,{direction:'top',className:'dc-tip'});
-    m.on('click',function(){showDCPopup(n,d.lat,d.lng,false)});
-    dcLayer.addLayer(m);
+    try{
+      var d=dests[n];
+      if(isNaN(d.lat)||isNaN(d.lng))return;
+      var m=L.circleMarker([d.lat,d.lng],{radius:3.5,fillColor:'#6a1b9a',color:'#fff',weight:1,fillOpacity:0.9,renderer:cv});
+      m.bindTooltip(n,{direction:'top',className:'dc-tip'});
+      m.on('click',function(){showDCPopup(n,d.lat,d.lng,false)});
+      dcLayer.addLayer(m);
+    }catch(e){console.warn('Dest DC skipped:',n,'-',e.message||e);}
   });
   Object.keys(origins).forEach(function(n){
-    var d=origins[n];
-    var m1=L.circleMarker([d.lat,d.lng],{radius:9,fillColor:'#C8C820',color:'#C8C820',weight:1,fillOpacity:0.3,renderer:cv});
-    var m2=L.circleMarker([d.lat,d.lng],{radius:5.5,fillColor:'#0B9B8A',color:'#fff',weight:1.5,fillOpacity:1,renderer:cv});
-    m2.bindTooltip('<strong>'+n+'</strong>',{direction:'top',className:'dc-tip'});
-    m2.on('click',function(){showDCPopup(n,d.lat,d.lng,true)});
-    dcLayer.addLayer(m1);dcLayer.addLayer(m2);
+    try{
+      var d=origins[n];
+      if(isNaN(d.lat)||isNaN(d.lng))return;
+      var m1=L.circleMarker([d.lat,d.lng],{radius:9,fillColor:'#C8C820',color:'#C8C820',weight:1,fillOpacity:0.3,renderer:cv});
+      var m2=L.circleMarker([d.lat,d.lng],{radius:5.5,fillColor:'#0B9B8A',color:'#fff',weight:1.5,fillOpacity:1,renderer:cv});
+      m2.bindTooltip('<strong>'+n+'</strong>',{direction:'top',className:'dc-tip'});
+      m2.on('click',function(){showDCPopup(n,d.lat,d.lng,true)});
+      dcLayer.addLayer(m1);dcLayer.addLayer(m2);
+    }catch(e){console.warn('Origin DC skipped:',n,'-',e.message||e);}
   });
   dcLayer.addTo(map);
 }
@@ -1029,21 +1037,32 @@ function parseLocalXlsx(f){
 }
 
 function boot(){
+  console.log('%c🗺 Zonal Prime Map View · v2.1','color:#0B9B8A;font-weight:700;font-size:14px');
   setProg(5,'Initializing map...');
   cv=L.canvas({padding:0.5});
   map=L.map('map',{zoomControl:true,preferCanvas:true,renderer:cv,minZoom:4}).setView([22.5,82],5);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'&copy; OSM &copy; CartoDB',maxZoom:18,subdomains:'abcd'}).addTo(map);
   hubLayer=L.layerGroup();hbLayer=L.layerGroup();
 
+  // Try to auto-load boundaries.geojson from the same directory (committed to repo)
+  fetch('boundaries.geojson').then(function(r){
+    if(!r.ok)return null;
+    return r.json();
+  }).then(function(geo){
+    if(geo&&geo.features){gjD=geo;console.log('✓ Auto-loaded '+geo.features.length.toLocaleString()+' pincode boundaries from repo');}
+  }).catch(function(){/* silent — user can still upload manually */});
+
   setProg(20,'Fetching road data from Google Sheet...');
   fetchSheet(ROAD_SHEET_NAME).then(function(rows){
     setProg(45,'Parsing '+rows.length.toLocaleString()+' road rows...');
     ROAD_ROUTES=parseRoadData(rows);
+    console.log('✓ Parsed '+ROAD_ROUTES.length+' OD lanes');
     setProg(60,'Fetching air data from Google Sheet...');
     return fetchSheet(AIR_SHEET_NAME);
   }).then(function(rows){
     setProg(75,'Parsing air data...');
     AIR_ROUTES=parseAirData(rows);
+    console.log('✓ Parsed '+AIR_ROUTES.length+' air routes');
     DC_LIST=buildDCList(ROAD_ROUTES);
     buildIndexes();
     setProg(85,'Building filters ('+ROAD_ROUTES.length+' lanes, '+AIR_ROUTES.length+' air routes)...');
