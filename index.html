@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Zonal Network Planning - Shadowfax</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -113,7 +116,7 @@ label.hb-up{cursor:pointer}
 <div class="lo" id="lo">
   <div class="lo-brand"><img src="https://www.shadowfax.in/logo_header_tm.svg" alt="Shadowfax" style="height:32px" onerror="this.outerHTML='<div style=font-size:20px;font-weight:800;color:#0B9B8A>SHADOWFAX</div>'"></div>
   <p class="lo-sub">Zonal Network Planning</p>
-  <p class="lo-sub2">Live data from Google Sheet · Road &amp; Air connectivity</p>
+  <p class="lo-sub2">Live data from Google Sheet · Road &amp; Air connectivity · v2.5</p>
   <div class="pw" id="pw"><div class="pl" id="pl">Initializing...</div><div class="pb-w"><div class="pf" id="pf"></div></div></div>
 </div>
 
@@ -122,7 +125,7 @@ label.hb-up{cursor:pointer}
   <div class="hdr">
     <div class="br">
       <img src="https://www.shadowfax.in/logo_header_tm.svg" alt="Shadowfax" style="height:22px" onerror="this.outerHTML='<span style=font-size:11px;font-weight:800;color:#0B9B8A>SHADOWFAX</span>'">
-      <div class="pn">Zonal Network Planning</div>
+      <div class="pn">Zonal Network Planning <span style="color:#aaa;font-weight:500;margin-left:4px">v2.5</span></div>
     </div>
     <div class="tabs">
       <button class="tab active" id="tabRoad" onclick="switchTab('road')">
@@ -1048,7 +1051,7 @@ function parseLocalXlsx(f){
 }
 
 function boot(){
-  console.log('%c🗺 Zonal Prime Map View · v2.4','color:#0B9B8A;font-weight:700;font-size:14px');
+  console.log('%c🗺 Zonal Prime Map View · v2.5','color:#0B9B8A;font-weight:700;font-size:14px');
   setProg(5,'Initializing map...');
   cv=L.canvas({padding:0.5});
   map=L.map('map',{zoomControl:true,preferCanvas:true,renderer:cv,minZoom:4}).setView([22.5,82],5);
